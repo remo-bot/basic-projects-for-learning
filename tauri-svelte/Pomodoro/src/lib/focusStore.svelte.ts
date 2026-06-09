@@ -1,27 +1,38 @@
 import type { Task } from "./types/task";
+import type { SavedTasks, TimerSettings } from "./types/localStorageVariables";
 
-// const initalTasksTitlesList = [
-//     "Coding",
-//     "Working Out",
-//     "Learning French",
-//     "Learning Germany",
-//     "Meditating"
-// ]; 
+
+ const savedTasksJson =  localStorage.getItem('pomodoro:tasks');
+ const initialSavedTasks: SavedTasks = savedTasksJson ? JSON.parse(savedTasksJson) 
+ :  ({
+        tasks: [],
+        creationIndex: 1,
+        currentTaskId: null,
+     } as SavedTasks);
+
+const timerSettingsJson = localStorage.getItem('pomodoro:timerSettings');
+const initialTimerSettings: TimerSettings = timerSettingsJson ? JSON.parse(timerSettingsJson)
+: ({
+    initialWorkSeconds: 25 * 60,
+    initialRestSeconds: 5 * 60
+} as TimerSettings);
+
+
 
 class focusGlobalStore {
-    #creationIndex = 1; // 1 indexed to avoid accidental falsy values, I already fell for it once 
-    #tasksList: Array<Task> = $state([]);
-    #currentTaskId: number | null = $state(null); 
-    #initialTotalWorkSeconds = 5 * 60 * 0.02;
-    #initialTotalRestSeconds = 5 * 60 * 0.01;
-    #totalTaskSeconds = $state(this.#initialTotalWorkSeconds);
+    #creationIndex = initialSavedTasks.creationIndex; // 1 indexed to avoid accidental falsy values, I already fell for it once 
+    #tasksList: Array<Task> = $state(initialSavedTasks.tasks);
+    #currentTaskId: number | null = $state(initialSavedTasks.currentTaskId); 
+    #initialTotalWorkSeconds = initialTimerSettings.initialWorkSeconds;
+    #initialTotalRestSeconds = initialTimerSettings.initialRestSeconds;
+    #totalWorkSeconds = $state(this.#initialTotalWorkSeconds);
     #totalRestSeconds = $state(this.#initialTotalRestSeconds);
+    #rotationsCount = 0; // Unused for now, but I might add it to the UI? so it will be tracked
     #isResting:boolean | null = $state(null);
     #isPaused = $state(false);
-    #rotationsCount = 0;
-    displaySeconds = $derived((this.#isResting ? this.#totalRestSeconds % 60 : this.#totalTaskSeconds % 60).toString().padStart(2, '0'));
-    displayMinutes = $derived((this.#isResting ? Math.floor((this.#totalRestSeconds % 3600) / 60) : Math.floor((this.#totalTaskSeconds % 3600) / 60)).toString().padStart(2, '0'));
-    displayHours = $derived((this.#isResting ? Math.floor(this.#totalRestSeconds / 3600) : Math.floor(this.#totalTaskSeconds / 3600)).toString().padStart(2, '0'));
+    displaySeconds = $derived((this.#isResting ? this.#totalRestSeconds % 60 : this.#totalWorkSeconds % 60).toString().padStart(2, '0'));
+    displayMinutes = $derived((this.#isResting ? Math.floor((this.#totalRestSeconds % 3600) / 60) : Math.floor((this.#totalWorkSeconds % 3600) / 60)).toString().padStart(2, '0'));
+    displayHours = $derived((this.#isResting ? Math.floor(this.#totalRestSeconds / 3600) : Math.floor(this.#totalWorkSeconds / 3600)).toString().padStart(2, '0'));
     #timerInterval: number | undefined | null = $state(undefined);
 
 
@@ -38,27 +49,27 @@ class focusGlobalStore {
         this.#currentTaskId = newTaskId ?? null;
     }
     get currentTask(): Task | null{
-        return this.tasksList.find(task => task.id === this.#currentTaskId) ?? null;
+        return this.#tasksList.find(task => task.id === this.#currentTaskId) ?? null;
     }
     
     get tasksList(): Array<Task>{
         return this.#tasksList;
     }
     
-    addTask(taskTitle: string, timer?: number){
+    addTask(taskTitle: string){
         const newTask =  {
             id: this.#creationIndex,
             title: taskTitle,
             isCompleted: false,
-            // timer: timer ?? 5 * 60
         };
         this.#creationIndex += 1;
         this.#tasksList = [...this.#tasksList, newTask];
-        // return newTask; // return in case I need the output immediately?
+        this.saveTasks();
     }
     
     deleteTask(taskId: number){
         this.#tasksList = this.#tasksList.filter(task => task.id != taskId);
+        this.saveTasks();
     }
     
     get initialTotalWorkSeconds() { 
@@ -77,22 +88,22 @@ class focusGlobalStore {
         this.#isResting = value
     }
     
-    get totalTaskSeconds(){
-        return this.#totalTaskSeconds;
+    get totalWorkSeconds(){
+        return this.#totalWorkSeconds;
     }
     get totalRestSeconds(){
         return this.#totalRestSeconds;
     }
     
     resetTaskSeconds(){
-        this.#totalTaskSeconds = this.#initialTotalWorkSeconds;
+        this.#totalWorkSeconds = this.#initialTotalWorkSeconds;
     }
     resetRestSeconds(){
         this.#totalRestSeconds = this.#initialTotalRestSeconds;
     }
     
     decreaseTaskSeconds(){
-        this.#totalTaskSeconds -= 1;
+        this.#totalWorkSeconds -= 1;
     }
     decreaseRestSeconds(){
         this.#totalRestSeconds -= 1;
@@ -115,7 +126,7 @@ class focusGlobalStore {
         if(this.#timerInterval) return;
         if(this.#isResting === null) this.setIsResting(false);
         this.#timerInterval = window.setInterval(() => {
-            console.log(`Resting: ${this.#totalRestSeconds}\nWorking: ${this.#totalTaskSeconds}`);
+            console.log(`Resting: ${this.#totalRestSeconds}\nWorking: ${this.#totalWorkSeconds}`);
             if(this.#isResting){
                 if(this.#totalRestSeconds > 0)
                     this.decreaseRestSeconds();
@@ -126,7 +137,7 @@ class focusGlobalStore {
                 }
             }
             else { // Working
-                if(this.#totalTaskSeconds > 0)
+                if(this.#totalWorkSeconds > 0)
                     this.decreaseTaskSeconds();
                 else{
                     this.stopTimer();
@@ -160,11 +171,27 @@ class focusGlobalStore {
         return this.#timerInterval;
     }
 
+    #saveTimerSettings() {
+        localStorage.setItem('pomodoro:timerSettings', JSON.stringify({
+            initialWorkSeconds: this.#initialTotalWorkSeconds,
+            initialRestSeconds: this.#initialTotalRestSeconds
+        }));
+    }
+
+    saveTasks(){
+        localStorage.setItem('pomodoro:tasks', JSON.stringify({
+            tasks: this.#tasksList,
+            creationIndex: this.#creationIndex,
+            currentTaskId: this.#currentTaskId
+        }));
+    }
+
     setInitialTotalWorkSeconds(seconds: number){
     this.#initialTotalWorkSeconds = seconds;
         if (this.#timerInterval === undefined) {
-            this.#totalTaskSeconds = seconds;
+            this.#totalWorkSeconds = seconds;
         }
+        this.#saveTimerSettings();
     }
 
     setInitialTotalRestSeconds(seconds: number){
@@ -172,12 +199,13 @@ class focusGlobalStore {
         if (this.#timerInterval === undefined) {
             this.#totalRestSeconds = seconds;
         }
+        this.#saveTimerSettings();
     }
 
     updateTasksList(tasks: Array<Task>){
         this.#tasksList = tasks;
+        this.saveTasks();
     }
-
 }
 
 

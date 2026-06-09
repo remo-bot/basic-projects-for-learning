@@ -30,7 +30,7 @@
     >
         {#each tasks as task(task.id)}
             <li class="flex items-center space-x-3 p-3 rounded-xl shadow-sm transition-colors border
-                {task.isCompleted 
+                {task.isCompleted
                     ? 'bg-green-50/50 dark:bg-green-950/20 border-green-300 dark:border-green-900/70' 
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}"
                 animate:flip="{{duration: 200}}"
@@ -38,6 +38,7 @@
                 <input 
                     type="checkbox" 
                     bind:checked={task.isCompleted}
+                    onchange={() => focusStore.saveTasks()}
                     class="w-4 h-4 accent-green-600 dark:accent-green-500 border-slate-300 dark:border-slate-700 rounded focus:ring-green-500 focus:ring-offset-0 cursor-pointer"
                 />
                 <button 
