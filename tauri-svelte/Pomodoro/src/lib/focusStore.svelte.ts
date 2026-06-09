@@ -174,6 +174,10 @@ class focusGlobalStore {
         }
     }
 
+    updateTasksList(tasks: Array<Task>){
+        this.#tasksList = tasks;
+    }
+
 }
 
 
